@@ -349,6 +349,8 @@ glsl_get_base_glsl_type(const glsl_type *t)
       return &glsl_type_builtin_double;
    case GLSL_TYPE_BFLOAT16:
       return &glsl_type_builtin_bfloat16_t;
+   case GLSL_TYPE_FLOAT_E4M3FN:
+      return &glsl_type_builtin_e4m3fn_t;
    case GLSL_TYPE_BOOL:
       return &glsl_type_builtin_bool;
    case GLSL_TYPE_UINT64:
@@ -387,6 +389,7 @@ glsl_get_bare_type(const glsl_type *t)
    case GLSL_TYPE_INT16:
    case GLSL_TYPE_FLOAT16:
    case GLSL_TYPE_BFLOAT16:
+   case GLSL_TYPE_FLOAT_E4M3FN:
    case GLSL_TYPE_UINT:
    case GLSL_TYPE_INT:
    case GLSL_TYPE_FLOAT:
@@ -597,6 +600,7 @@ glsl_ ## vname ## _type (unsigned components)    \
 VECN(components, float, vec)
 VECN(components, float16_t, f16vec)
 VECN(components, bfloat16_t, bf16vec)
+VECN(components, e4m3fn_t, e4m3fnvec)
 VECN(components, double, dvec)
 VECN(components, int, ivec)
 VECN(components, uint, uvec)
@@ -647,6 +651,8 @@ glsl_simple_explicit_type(unsigned base_type, unsigned rows, unsigned columns,
          return glsl_f16vec_type(rows);
       case GLSL_TYPE_BFLOAT16:
          return glsl_bf16vec_type(rows);
+      case GLSL_TYPE_FLOAT_E4M3FN:
+         return glsl_e4m3fnvec_type(rows);
       case GLSL_TYPE_DOUBLE:
          return glsl_dvec_type(rows);
       case GLSL_TYPE_BOOL:
@@ -1749,6 +1755,7 @@ glsl_get_component_slots(const glsl_type *t)
    case GLSL_TYPE_FLOAT:
    case GLSL_TYPE_FLOAT16:
    case GLSL_TYPE_BFLOAT16:
+   case GLSL_TYPE_FLOAT_E4M3FN:
    case GLSL_TYPE_BOOL:
       return glsl_get_components(t);
 
@@ -1802,6 +1809,7 @@ glsl_get_component_slots_aligned(const glsl_type *t, unsigned offset)
    case GLSL_TYPE_FLOAT:
    case GLSL_TYPE_FLOAT16:
    case GLSL_TYPE_BFLOAT16:
+   case GLSL_TYPE_FLOAT_E4M3FN:
    case GLSL_TYPE_BOOL:
       return glsl_get_components(t);
 
@@ -2889,6 +2897,7 @@ glsl_count_vec4_slots(const glsl_type *t, bool is_gl_vertex_input, bool is_bindl
    case GLSL_TYPE_FLOAT:
    case GLSL_TYPE_FLOAT16:
    case GLSL_TYPE_BFLOAT16:
+   case GLSL_TYPE_FLOAT_E4M3FN:
    case GLSL_TYPE_BOOL:
       return t->matrix_columns;
    case GLSL_TYPE_DOUBLE:
@@ -3094,6 +3103,7 @@ encode_type_to_blob(struct blob *blob, const glsl_type *type)
    case GLSL_TYPE_FLOAT:
    case GLSL_TYPE_FLOAT16:
    case GLSL_TYPE_BFLOAT16:
+   case GLSL_TYPE_FLOAT_E4M3FN:
    case GLSL_TYPE_DOUBLE:
    case GLSL_TYPE_UINT8:
    case GLSL_TYPE_INT8:
@@ -3743,6 +3753,7 @@ glsl_get_natural_size_align_bytes(const glsl_type *type,
    case GLSL_TYPE_INT16:
    case GLSL_TYPE_FLOAT16:
    case GLSL_TYPE_BFLOAT16:
+   case GLSL_TYPE_FLOAT_E4M3FN:
    case GLSL_TYPE_UINT:
    case GLSL_TYPE_INT:
    case GLSL_TYPE_FLOAT:
@@ -3803,6 +3814,7 @@ glsl_get_word_size_align_bytes(const glsl_type *type,
    case GLSL_TYPE_INT16:
    case GLSL_TYPE_FLOAT16:
    case GLSL_TYPE_BFLOAT16:
+   case GLSL_TYPE_FLOAT_E4M3FN:
    case GLSL_TYPE_UINT:
    case GLSL_TYPE_INT:
    case GLSL_TYPE_FLOAT:
@@ -3863,6 +3875,7 @@ glsl_get_vec4_size_align_bytes(const glsl_type *type,
    case GLSL_TYPE_INT16:
    case GLSL_TYPE_FLOAT16:
    case GLSL_TYPE_BFLOAT16:
+   case GLSL_TYPE_FLOAT_E4M3FN:
    case GLSL_TYPE_UINT:
    case GLSL_TYPE_INT:
    case GLSL_TYPE_FLOAT:
