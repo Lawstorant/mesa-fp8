@@ -212,6 +212,12 @@ convert_base_type(nir_builder *b, nir_def *src, enum glsl_base_type src_type, en
    } else if (dst_type == GLSL_TYPE_BFLOAT16) {
       src = convert_base_type(b, src, src_type, GLSL_TYPE_FLOAT);
       return nir_f2bf(b, src);
+   } else if (src_type == GLSL_TYPE_FLOAT_E4M3FN) {
+      src = nir_e4m3fn2f(b, src);
+      return convert_base_type(b, src, GLSL_TYPE_FLOAT, dst_type);
+   } else if (dst_type == GLSL_TYPE_FLOAT_E4M3FN) {
+      src = convert_base_type(b, src, src_type, GLSL_TYPE_FLOAT);
+      return nir_f2e4m3fn(b, src);
    }
 
    nir_op op = nir_type_conversion_op(nir_get_nir_type_for_glsl_base_type(src_type),
