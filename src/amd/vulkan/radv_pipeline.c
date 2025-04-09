@@ -265,6 +265,10 @@ opt_vectorize_callback(const nir_instr *instr, const void *_)
       return 1;
 
    const nir_alu_instr *alu = nir_instr_as_alu(instr);
+
+   if (alu->op == nir_op_f2e4m3fn || alu->op == nir_op_e4m3fn2f)
+      return 2;
+
    const unsigned bit_size = alu->def.bit_size;
    if (bit_size != 16)
       return 1;
