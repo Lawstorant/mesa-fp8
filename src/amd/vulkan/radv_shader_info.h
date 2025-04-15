@@ -89,6 +89,7 @@ struct radv_shader_info {
    bool uses_view_index;
    bool uses_invocation_id;
    bool uses_prim_id;
+   bool uses_f2e4m3fn;
    uint8_t wave_size;
    uint8_t ballot_bit_size;
    struct radv_userdata_locations user_sgprs_locs;
