@@ -61,12 +61,14 @@ void ac_llvm_context_init(struct ac_llvm_context *ctx, struct ac_llvm_compiler *
    ctx->i64 = LLVMIntTypeInContext(ctx->context, 64);
    ctx->i128 = LLVMIntTypeInContext(ctx->context, 128);
    ctx->intptr = ctx->i32;
+   ctx->bf16 = LLVMBFloatTypeInContext(ctx->context);
    ctx->f16 = LLVMHalfTypeInContext(ctx->context);
    ctx->f32 = LLVMFloatTypeInContext(ctx->context);
    ctx->f64 = LLVMDoubleTypeInContext(ctx->context);
    ctx->v4i8 = LLVMVectorType(ctx->i8, 4);
    ctx->v2i16 = LLVMVectorType(ctx->i16, 2);
    ctx->v4i16 = LLVMVectorType(ctx->i16, 4);
+   ctx->v2bf16 = LLVMVectorType(ctx->bf16, 2);
    ctx->v2f16 = LLVMVectorType(ctx->f16, 2);
    ctx->v4f16 = LLVMVectorType(ctx->f16, 4);
    ctx->v2i32 = LLVMVectorType(ctx->i32, 2);
