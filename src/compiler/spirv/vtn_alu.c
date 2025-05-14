@@ -697,6 +697,23 @@ vtn_handle_convert(struct vtn_builder *b, SpvOp opcode,
       return nir_f2bf(&b->nb, src_as_float);
    }
 
+   if (glsl_type_is_e4m3fn(glsl_src_type)) {
+      nir_def *src_as_float = nir_e4m3fn2f(&b->nb, src);
+      if (glsl_type_is_float(glsl_dest_type))
+         return src_as_float;
+      return vtn_handle_convert(b, opcode, dest_val, glsl_dest_type,
+                                glsl_float_type(), src_as_float);
+
+   } else if (glsl_type_is_e4m3fn(glsl_dest_type)) {
+      nir_def *src_as_float;
+      if (glsl_type_is_float(glsl_src_type))
+         src_as_float = src;
+      else
+         src_as_float = vtn_handle_convert(b, opcode, dest_val, glsl_float_type(),
+                                           glsl_src_type, src);
+      return nir_f2e4m3fn(&b->nb, src_as_float);
+   }
+
    /* Use bit_size from NIR source instead of from the original src type,
     * to account for mediump_16bit.  See vtn_handle_alu() for details.
     */

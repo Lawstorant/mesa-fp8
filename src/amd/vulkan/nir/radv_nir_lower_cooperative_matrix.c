@@ -166,19 +166,38 @@ radv_get_base_row(nir_builder *b, struct glsl_cmat_description desc, const lower
    if (params->gfx_level >= GFX12) {
       base_row = nir_udiv_imm(b, local_idx, 16);
 
-      if (desc.use == GLSL_CMAT_USE_ACCUMULATOR && params->wave_size == 64) {
+      if ((desc.use == GLSL_CMAT_USE_ACCUMULATOR || radv_nir_cmat_bits(desc) == 8) && params->wave_size == 64) {
          /* Switch rows from lanes 16..31 to 32..47, offset right shift by -2
           * to get implicit * 4.
           */
          base_row = nir_ushr_imm(b, nir_bitfield_reverse(b, base_row), 30 - 2);
+      } else if ((desc.use == GLSL_CMAT_USE_ACCUMULATOR || radv_nir_cmat_bits(desc) == 8) && params->wave_size == 32) {
+         base_row = nir_imul_imm(b, base_row, 8);
       } else {
-         base_row = nir_imul_imm(b, base_row, desc.use == GLSL_CMAT_USE_ACCUMULATOR && params->wave_size == 32 ? 8 : 4);
+         base_row = nir_imul_imm(b, base_row, 4);
       }
    } else {
       base_row = desc.use == GLSL_CMAT_USE_ACCUMULATOR ? nir_udiv_imm(b, local_idx, 16) : nir_imm_int(b, 0);
    }
 
    return base_row;
+}
+
+static unsigned
+radv_get_row_iter(struct glsl_cmat_description desc, const lower_cmat_params *params, unsigned i)
+{
+   if (params->gfx_level >= GFX12) {
+      /* 8bit and ACC are indexed normally, 16bit A/B is weird. */
+      if (desc.use != GLSL_CMAT_USE_ACCUMULATOR && params->wave_size == 32 && radv_nir_cmat_bits(desc) >= 16)
+         return i + (i & 4);
+      else
+         return i;
+   } else {
+      if (desc.use != GLSL_CMAT_USE_ACCUMULATOR)
+         return i;
+      else
+         return i * params->wave_size / 16;
+   }
 }
 
 static nir_def *
@@ -193,12 +212,56 @@ convert_base_type(nir_builder *b, nir_def *src, enum glsl_base_type src_type, en
    } else if (dst_type == GLSL_TYPE_BFLOAT16) {
       src = convert_base_type(b, src, src_type, GLSL_TYPE_FLOAT);
       return nir_f2bf(b, src);
+   } else if (src_type == GLSL_TYPE_FLOAT_E4M3FN) {
+      src = nir_e4m3fn2f(b, src);
+      return convert_base_type(b, src, GLSL_TYPE_FLOAT, dst_type);
+   } else if (dst_type == GLSL_TYPE_FLOAT_E4M3FN) {
+      src = convert_base_type(b, src, src_type, GLSL_TYPE_FLOAT);
+      return nir_f2e4m3fn(b, src);
    }
 
    nir_op op = nir_type_conversion_op(nir_get_nir_type_for_glsl_base_type(src_type),
                                       nir_get_nir_type_for_glsl_base_type(dst_type), nir_rounding_mode_undef);
 
    return nir_build_alu1(b, op, src);
+}
+
+static nir_def *
+radv_swizzle_gfx12_8bit_mat(nir_builder *b, nir_def *src, unsigned wave_size)
+{
+   assert(src->bit_size == 8);
+
+   src = nir_extract_bits(b, &src, 1, 0, src->num_components / 4, 32);
+
+   nir_def *res;
+
+   if (wave_size == 64) {
+      assert(src->num_components == 1);
+
+      nir_def *swapped = nir_rotate(b, src, nir_imm_int(b, 32), .cluster_size = 64);
+      swapped = nir_rotate(b, swapped, nir_imm_int(b, 16), .cluster_size = 32);
+
+      nir_def *cond = nir_inverse_ballot(b, 1, nir_imm_intN_t(b, 0xffffffff0000ull, 64));
+
+      res = nir_bcsel(b, cond, swapped, src);
+   } else {
+      assert(src->num_components == 2);
+
+      nir_def *src0 = nir_channel(b, src, 0);
+      nir_def *src1 = nir_channel(b, src, 1);
+
+      nir_def *swapped0 = nir_rotate(b, src0, nir_imm_int(b, 16), .cluster_size = 32);
+      nir_def *swapped1 = nir_rotate(b, src1, nir_imm_int(b, 16), .cluster_size = 32);
+
+      nir_def *cond = nir_inverse_ballot(b, 1, nir_imm_intN_t(b, 0xffff0000, 32));
+
+      nir_def *res0 = nir_bcsel(b, cond, swapped1, src0);
+      nir_def *res1 = nir_bcsel(b, cond, swapped0, src1);
+
+      res = nir_vec2(b, res0, res1);
+   }
+
+   return nir_extract_bits(b, &res, 1, 0, res->num_components * 4, 8);
 }
 
 bool
@@ -311,7 +374,6 @@ radv_nir_lower_cooperative_matrix(nir_shader *shader, enum amd_gfx_level gfx_lev
 
                unsigned length = radv_nir_cmat_length(desc, &params);
                unsigned mul = radv_nir_cmat_length_mul(desc, &params);
-               unsigned lanes_per_iter = desc.use == GLSL_CMAT_USE_ACCUMULATOR ? params.wave_size : 16;
                nir_def *vars[16];
                if (mul > 1) {
                   for (unsigned i = 0; i < length; ++i)
@@ -324,16 +386,10 @@ radv_nir_lower_cooperative_matrix(nir_shader *shader, enum amd_gfx_level gfx_lev
 
                for (unsigned i = 0; i < length / mul; ++i) {
                   nir_def *col_offset = inner_idx;
-                  nir_def *row_offset;
-                  uint32_t row_iter;
 
-                  if (gfx_level >= GFX12) {
-                     row_iter = desc.use != GLSL_CMAT_USE_ACCUMULATOR && wave_size == 32 ? i + (i & 4) : i;
-                  } else {
-                     row_iter = i * lanes_per_iter / 16;
-                  }
+                  uint32_t row_iter = radv_get_row_iter(desc, &params, i);
 
-                  row_offset = nir_iadd_imm(&b, base_row, row_iter);
+                  nir_def *row_offset = nir_iadd_imm(&b, base_row, row_iter);
 
                   if (layout == GLSL_MATRIX_LAYOUT_ROW_MAJOR) {
                      nir_def *tmp = col_offset;
@@ -385,7 +441,6 @@ radv_nir_lower_cooperative_matrix(nir_shader *shader, enum amd_gfx_level gfx_lev
 
                unsigned length = radv_nir_cmat_length(desc, &params);
                unsigned mul = radv_nir_cmat_length_mul(desc, &params);
-               unsigned lanes_per_iter = desc.use == GLSL_CMAT_USE_ACCUMULATOR ? params.wave_size : 16;
                nir_def *vars[16];
                for (unsigned i = 0; i < length; ++i)
                   vars[i] = nir_channel(&b, src, i);
@@ -395,16 +450,10 @@ radv_nir_lower_cooperative_matrix(nir_shader *shader, enum amd_gfx_level gfx_lev
 
                for (unsigned i = 0; i < length / mul; ++i) {
                   nir_def *col_offset = inner_idx;
-                  nir_def *row_offset;
-                  uint32_t row_iter;
 
-                  if (gfx_level >= GFX12) {
-                     row_iter = desc.use != GLSL_CMAT_USE_ACCUMULATOR && wave_size == 32 ? i + (i & 4) : i;
-                  } else {
-                     row_iter = i * lanes_per_iter / 16;
-                  }
+                  uint32_t row_iter = radv_get_row_iter(desc, &params, i);
 
-                  row_offset = nir_iadd_imm(&b, base_row, row_iter);
+                  nir_def *row_offset = nir_iadd_imm(&b, base_row, row_iter);
 
                   if (layout == GLSL_MATRIX_LAYOUT_ROW_MAJOR) {
                      nir_def *tmp = col_offset;
@@ -484,7 +533,15 @@ radv_nir_lower_cooperative_matrix(nir_shader *shader, enum amd_gfx_level gfx_lev
                   src = nir_vec(&b, components, src->num_components / scale);
                }
 
+               if (dst_desc.use != GLSL_CMAT_USE_ACCUMULATOR && gfx_level >= GFX12 &&
+                   radv_nir_cmat_bits(src_desc) == 8 && radv_nir_cmat_bits(dst_desc) > 8)
+                  src = radv_swizzle_gfx12_8bit_mat(&b, src, wave_size);
+
                nir_def *ret = convert_base_type(&b, src, src_element_type, dst_element_type);
+
+               if (dst_desc.use != GLSL_CMAT_USE_ACCUMULATOR && gfx_level >= GFX12 &&
+                   radv_nir_cmat_bits(dst_desc) == 8 && radv_nir_cmat_bits(src_desc) > 8)
+                  ret = radv_swizzle_gfx12_8bit_mat(&b, ret, wave_size);
 
                if (dst_mul > src_mul) {
                   nir_def *components[NIR_MAX_VEC_COMPONENTS];

@@ -176,6 +176,9 @@ lower_bfdot_to_bfdot2_bfadd(nir_builder *b, nir_alu_instr *alu)
 static nir_def *
 lower_fdot(nir_alu_instr *alu, nir_builder *builder, bool is_bfloat16)
 {
+   if (is_bfloat16 && builder->shader->options->has_bfdot2_bfadd)
+      return lower_bfdot_to_bfdot2_bfadd(builder, alu);
+
    /* Reversed order can result in lower instruction count because it
     * creates more MAD/FMA in the case of fdot(a, vec4(b, 1.0)).
     * Some games expect xyzw order, so only reverse the order for imprecise fdot.

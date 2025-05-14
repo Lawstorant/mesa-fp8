@@ -598,7 +598,7 @@ get_alu_src(struct isel_context* ctx, nir_alu_src src, unsigned size = 1)
          elems[i] = emit_extract_vector(ctx, vec, src.swizzle[i], elem_rc);
          vec_instr->operands[i] = Operand{elems[i]};
       }
-      Temp dst = ctx->program->allocateTmp(RegClass(vec.type(), elem_size * size / 4));
+      Temp dst = ctx->program->allocateTmp(RegClass::get(vec.type(), elem_size * size));
       vec_instr->definitions[0] = Definition(dst);
       ctx->block->instructions.emplace_back(std::move(vec_instr));
       ctx->allocated_vec.emplace(dst.id(), elems);
@@ -2995,6 +2995,35 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
       assert(instr->src[0].src.ssa->bit_size == 32);
       Temp src = get_alu_src(ctx, instr->src[0]);
       bld.vop1(aco_opcode::v_cvt_f64_f32, Definition(dst), src);
+      break;
+   }
+   case nir_op_f2e4m3fn: {
+      Operand src0, src1;
+      if (instr->def.num_components == 2) {
+         Temp src = get_ssa_temp(ctx, instr->src[0].src.ssa);
+         RegClass rc = RegClass(src.regClass().type(), 1);
+         src0 = Operand(emit_extract_vector(ctx, src, instr->src[0].swizzle[0], rc));
+         src1 = Operand(emit_extract_vector(ctx, src, instr->src[0].swizzle[1], rc));
+      } else {
+         assert(instr->def.num_components == 1);
+         src0 = Operand(get_alu_src(ctx, instr->src[0]));
+         src1 = Operand::c32(0);
+      }
+      bld.vop3(aco_opcode::v_cvt_pk_fp8_f32, Definition(dst), src0, src1);
+      if (instr->def.num_components == 2)
+         emit_split_vector(ctx, dst, 2);
+      break;
+   }
+   case nir_op_e4m3fn2f: {
+      if (instr->def.num_components == 2) {
+         Temp src = get_alu_src(ctx, instr->src[0], 2);
+         bld.vop1(aco_opcode::v_cvt_pk_f32_fp8, Definition(dst), src);
+         emit_split_vector(ctx, dst, 2);
+      } else {
+         Temp src = get_alu_src(ctx, instr->src[0]);
+         assert(instr->def.num_components == 1);
+         bld.vop1(aco_opcode::v_cvt_f32_fp8, Definition(dst), src);
+      }
       break;
    }
    case nir_op_i2f16: {
@@ -8050,6 +8079,13 @@ visit_cmat_muladd(isel_context* ctx, nir_intrinsic_instr* instr)
       neg_lo[0] = type_a == GLSL_TYPE_INT8;
       neg_lo[1] = type_b == GLSL_TYPE_INT8;
       break;
+   case GLSL_TYPE_UINT8:
+   case GLSL_TYPE_INT8: {
+      opcode = aco_opcode::v_wmma_i32_16x16x16_iu8;
+      neg_lo[0] = type_a == GLSL_TYPE_INT8;
+      neg_lo[1] = type_b == GLSL_TYPE_INT8;
+      break;
+   case GLSL_TYPE_FLOAT_E4M3FN: opcode = aco_opcode::v_wmma_f32_16x16x16_fp8_fp8; break;
    }
    default: unreachable("invalid cmat_muladd_amd type");
    }

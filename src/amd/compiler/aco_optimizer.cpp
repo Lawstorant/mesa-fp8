@@ -467,7 +467,8 @@ can_apply_sgprs(opt_ctx& ctx, aco_ptr<Instruction>& instr)
           instr->opcode != aco_opcode::v_wmma_f16_16x16x16_f16 &&
           instr->opcode != aco_opcode::v_wmma_bf16_16x16x16_bf16 &&
           instr->opcode != aco_opcode::v_wmma_i32_16x16x16_iu8 &&
-          instr->opcode != aco_opcode::v_wmma_i32_16x16x16_iu4;
+          instr->opcode != aco_opcode::v_wmma_i32_16x16x16_iu4 &&
+          instr->opcode != aco_opcode::v_wmma_f32_16x16x16_fp8_fp8;
 }
 
 /* only covers special cases */
@@ -528,6 +529,7 @@ alu_can_accept_constant(const aco_ptr<Instruction>& instr, unsigned operand)
    case aco_opcode::v_interp_p2_rtz_f16_f32_inreg:
    case aco_opcode::v_dot2_bf16_bf16: /* TODO */
    case aco_opcode::v_wmma_f32_16x16x16_f16:
+   case aco_opcode::v_wmma_f32_16x16x16_fp8_fp8:
    case aco_opcode::v_wmma_f32_16x16x16_bf16:
    case aco_opcode::v_wmma_f16_16x16x16_f16:
    case aco_opcode::v_wmma_bf16_16x16x16_bf16:

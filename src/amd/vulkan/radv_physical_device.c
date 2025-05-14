@@ -579,7 +579,7 @@ radv_physical_device_get_supported_extensions(const struct radv_physical_device 
       .KHR_sampler_ycbcr_conversion = true,
       .KHR_separate_depth_stencil_layouts = true,
       .KHR_shader_atomic_int64 = true,
-      .KHR_shader_bfloat16 = pdev->info.gfx_level >= GFX12, /* GFX11 has precision issues. */
+      .KHR_shader_bfloat16 = pdev->info.gfx_level >= GFX11,
       .KHR_shader_clock = true,
       .KHR_shader_draw_parameters = true,
       .KHR_shader_expect_assume = true,
@@ -1310,7 +1310,7 @@ radv_physical_device_get_features(const struct radv_physical_device *pdev, struc
 
       /* VK_KHR_shader_bfloat16 */
       .shaderBFloat16Type = true,
-      .shaderBFloat16DotProduct = true,
+      .shaderBFloat16DotProduct = pdev->info.gfx_level >= GFX12,
       .shaderBFloat16CooperativeMatrix = radv_cooperative_matrix_enabled(pdev),
 
       /* VK_EXT_zero_initialize_device_memory */

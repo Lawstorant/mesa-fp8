@@ -482,6 +482,8 @@ aco_nir_op_supports_packed_math_16bit(const nir_alu_instr* alu)
       return (shader->options->force_f2f16_rtz && !nir_is_rounding_mode_rtne(execution_mode, 16)) ||
              nir_is_rounding_mode_rtz(execution_mode, 16);
    }
+   case nir_op_f2e4m3fn:
+   case nir_op_e4m3fn2f:
    case nir_op_fadd:
    case nir_op_fsub:
    case nir_op_fmul:

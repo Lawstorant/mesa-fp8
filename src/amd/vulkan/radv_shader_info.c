@@ -346,6 +346,18 @@ gather_tex_info(const nir_shader *nir, const nir_tex_instr *instr, struct radv_s
 }
 
 static void
+gather_alu_info(const nir_shader *nir, const nir_alu_instr *instr, struct radv_shader_info *info)
+{
+   switch (instr->op) {
+   case nir_op_f2e4m3fn:
+      info->uses_f2e4m3fn = true;
+      break;
+   default:
+      break;
+   }
+}
+
+static void
 gather_info_block(const nir_shader *nir, const nir_block *block, struct radv_shader_info *info,
                   const struct radv_graphics_state_key *gfx_state, const struct radv_shader_stage_key *stage_key,
                   bool consider_force_vrs)
@@ -358,6 +370,8 @@ gather_info_block(const nir_shader *nir, const nir_block *block, struct radv_sha
       case nir_instr_type_tex:
          gather_tex_info(nir, nir_instr_as_tex(instr), info);
          break;
+      case nir_instr_type_alu:
+         gather_alu_info(nir, nir_instr_as_alu(instr), info);
       default:
          break;
       }
@@ -1845,6 +1859,7 @@ radv_nir_shader_info_merge(const struct radv_shader_stage *src, struct radv_shad
    dst_info->desc_set_used_mask |= src_info->desc_set_used_mask;
    dst_info->uses_view_index |= src_info->uses_view_index;
    dst_info->uses_prim_id |= src_info->uses_prim_id;
+   dst_info->uses_f2e4m3fn |= src_info->uses_f2e4m3fn;
    dst_info->inline_push_constant_mask |= src_info->inline_push_constant_mask;
 
    /* Only inline all push constants if both allows it. */

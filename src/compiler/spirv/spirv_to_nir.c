@@ -1890,10 +1890,14 @@ vtn_handle_type(struct vtn_builder *b, SpvOp opcode,
       int32_t encoding = count > 3 ? w[3] : -1;
       switch (encoding) {
       case -1:
-         /* No encoding specified, it is a regular FP. */
-         vtn_fail_if(bit_size != 16 && bit_size != 32 && bit_size != 64,
+         if (bit_size == 8) {
+           val->type->type = glsl_e4m3fn_t_type();
+         } else {
+            /* No encoding specified, it is a regular FP. */
+            vtn_fail_if(bit_size != 16 && bit_size != 32 && bit_size != 64,
                      "Invalid float bit size: %u", bit_size);
-         val->type->type = glsl_floatN_t_type(bit_size);
+            val->type->type = glsl_floatN_t_type(bit_size);
+         }
          break;
 
       case SpvFPEncodingBFloat16KHR:

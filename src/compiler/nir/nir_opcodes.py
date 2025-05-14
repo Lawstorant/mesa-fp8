@@ -1765,3 +1765,7 @@ opcode("bfdot2_bfadd", 1, tint16, [2, 2, 1], [tint16, tint16, tint16],
 
    dst.x = _mesa_float_to_bfloat16_bits_rte(acc);
 """)
+
+
+unop_numeric_convert("e4m3fn2f", tfloat32, tuint8, "0") # TODO constant fold
+unop_numeric_convert("f2e4m3fn", tuint8, tfloat32, "0") # TODO constant fold
